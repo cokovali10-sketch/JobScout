@@ -1,30 +1,55 @@
 # JobScout
 
-Async structured data collector from HTTP APIs, files, and RSS feeds.
+Async structured data collector with retry logic, rate limiting, and deduplication.
+
+**Version:** 1.0.0 | **Language:** Python | **License:** MIT
 
 ## Features
 
-- Async collection from multiple sources concurrently
-- HTTP/JSON, CSV, text, RSS parsers
-- JSON path extraction for nested API responses
-- File sources: JSON, JSONL, CSV
-- Filter collected items by tags or field values
-- CLI and programmatic API
-- Config-driven batch collection
+### Core Capabilities
+- **Async collection** — gather data from multiple sources concurrently
+- **Multiple formats** — HTTP/JSON, CSV, text, RSS/Atom feeds
+- **File sources** — JSON, JSONL (line-delimited JSON), CSV files
+- **JSON path extraction** — navigate nested API responses with dot notation
 
-## Usage
+### Reliability
+- **Automatic retries** — configurable retry count with exponential backoff
+- **Rate limiting** — configurable delay between requests per source
+- **HTTP 429 handling** — respects Retry-After headers
+- **Timeout protection** — per-request timeout prevents hanging
+
+### Data Quality
+- **Automatic deduplication** — hash-based dedup across all collected items
+- **Explicit dedup** — call `deduplicate()` to remove duplicates after collection
+- **Filter by criteria** — filter collected items by tags or field values
+
+### Export
+- **JSON export** — structured output for programmatic use
+- **JSONL export** — line-delimited for streaming/large datasets
+- **Save to file** — async file writing
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+## CLI Usage
 
 ```bash
 # Collect from HTTP API
 jobscout http users "https://api.example.com/users" --path data.results
 
-# Collect from RSS
+# Collect with retries and rate limiting
+jobscout http users "https://api.example.com/users" --retries 5 --rate-limit 1.0
+
+# Collect from RSS feed
 jobscout rss news "https://news.ycombinator.com/rss"
 
 # Collect from file
 jobscout file data ./data.json --format json
 
-# Run from config
+# Run from config file
 jobscout run sources.json
 ```
 
@@ -33,28 +58,87 @@ jobscout run sources.json
 ```json
 {
   "sources": [
-    {"name": "users", "type": "http", "url": "https://api.example.com/users", "parser": "json", "item_path": "data.results"},
-    {"name": "news", "type": "rss", "url": "https://news.ycombinator.com/rss"},
-    {"name": "local", "type": "file", "path": "./data.csv", "format": "csv"}
+    {
+      "name": "users",
+      "type": "http",
+      "url": "https://api.example.com/users",
+      "parser": "json",
+      "item_path": "data.results",
+      "retries": 3,
+      "rate_limit": 0.5
+    },
+    {
+      "name": "news",
+      "type": "rss",
+      "url": "https://news.ycombinator.com/rss",
+      "retries": 5
+    },
+    {
+      "name": "local",
+      "type": "file",
+      "path": "./data.csv",
+      "format": "csv"
+    }
   ]
 }
 ```
 
-## Programmatic Use
+## Programmatic API
 
 ```python
 import asyncio
-from jobscout.collector import Collector, HTTPSource
+from jobscout.collector import Collector, HTTPSource, FileSource
 
 async def main():
     collector = Collector()
-    collector.add_source(HTTPSource("users", "https://api.example.com/users"))
-    results = await collector.collect_concurrent()
-    for item in results:
-        print(item.data)
+    
+    # Add HTTP source with retry and rate limiting
+    collector.add_source(HTTPSource(
+        name="users",
+        url="https://api.example.com/users",
+        retries=3,
+        retry_delay=1.0,
+        rate_limit=0.5,
+        item_path="data.results"
+    ))
+    
+    # Add file source
+    collector.add_source(FileSource("local", "./data.json"))
+    
+    # Collect concurrently (max 5 at a time)
+    results = await collector.collect_concurrent(max_concurrent=5)
+    
+    # Deduplicate
+    collector.deduplicate()
+    
+    # Filter
+    filtered = collector.filter_items(type="user")
+    
+    # Save
+    await collector.save_json("output.json")
+    await collector.save_jsonl("output.jsonl")
+    
+    # Stats
+    print(collector.stats)
+    
     await collector.close()
 
 asyncio.run(main())
+```
+
+## Project Structure
+
+```
+JobScout/
+├── jobscout/
+│   ├── __init__.py      # Package metadata
+│   ├── models.py        # CollectedItem data model
+│   ├── collector.py     # Sources and collector with retry/dedup
+│   └── cli.py           # CLI interface
+├── tests/
+│   └── test_all.py      # 12 unit tests
+├── setup.py             # Package configuration
+└── README.md
 ```
 
 ## License
