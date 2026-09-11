@@ -9,7 +9,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from jobscout.models import CollectedItem
-from jobscout.collector import Collector, FileSource
+from jobscout.collector import Collector, FileSource, WebSocketSource
 
 
 def test_collected_item():
@@ -149,6 +149,66 @@ def test_collector_to_json():
     output = asyncio.run(run())
     data = json.loads(output)
     assert len(data) == 1
+
+
+def test_cache_ttl():
+    collector = Collector(cache_ttl=300)
+
+    async def run():
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump([{"id": 1}], f)
+            path = f.name
+        source = FileSource("test", path)
+        collector.add_source(source)
+
+        results1 = await collector.collect_concurrent()
+        assert len(results1) == 1
+        assert "test" in collector._cache
+
+        results2 = await collector.collect_concurrent()
+        os.unlink(path)
+        return results2
+
+    results = asyncio.run(run())
+    assert len(results) == 1
+
+
+def test_deduplicate_fuzzy():
+    collector = Collector()
+
+    async def run():
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump([
+                {"name": "Alice Smith", "city": "New York"},
+                {"name": "Alice Smyth", "city": "New York"},
+                {"name": "Bob Jones", "city": "Boston"},
+            ], f)
+            path = f.name
+        collector.add_source(FileSource("test", path))
+        await collector.collect_concurrent()
+        os.unlink(path)
+        return collector.deduplicate_fuzzy(threshold=0.85)
+
+    results = asyncio.run(run())
+    assert len(results) == 2
+
+
+def test_fuzzy_match():
+    assert Collector._fuzzy_match({"a": "hello"}, {"a": "hello"}, 0.9)
+    assert Collector._fuzzy_match({"a": "hello"}, {"a": "helo"}, 0.8)
+    assert not Collector._fuzzy_match({"a": "hello"}, {"a": "xyz"}, 0.9)
+
+
+def test_cache_expired():
+    from jobscout.collector import CacheEntry
+    entry = CacheEntry(items=[], fetched_at=0, ttl=1)
+    assert entry.is_expired()
+
+
+def test_websocket_source_init():
+    source = WebSocketSource("ws", "ws://localhost:8080", max_messages=50)
+    assert source.name == "ws"
+    assert source.max_messages == 50
 
 
 if __name__ == "__main__":

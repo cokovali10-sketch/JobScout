@@ -2,7 +2,7 @@
 
 Async structured data collector with retry logic, rate limiting, and deduplication.
 
-**Version:** 1.0.0 | **Language:** Python | **License:** MIT
+**Version:** 1.1.0 | **Language:** Python | **License:** MIT
 
 ## Features
 
@@ -20,8 +20,16 @@ Async structured data collector with retry logic, rate limiting, and deduplicati
 
 ### Data Quality
 - **Automatic deduplication** — hash-based dedup across all collected items
+- **Fuzzy deduplication** — similarity-based dedup for near-duplicates
 - **Explicit dedup** — call `deduplicate()` to remove duplicates after collection
 - **Filter by criteria** — filter collected items by tags or field values
+
+### Performance
+- **Caching with TTL** — avoid re-fetching same URLs within configurable time window
+- **Scheduled collection** — run collection on interval with `--schedule`
+
+### Real-time
+- **WebSocket source** — connect to WebSocket endpoints for live data streams
 
 ### Export
 - **JSON export** — structured output for programmatic use
@@ -31,7 +39,11 @@ Async structured data collector with retry logic, rate limiting, and deduplicati
 ## Installation
 
 ```bash
+# Install with pip (uses pyproject.toml)
 pip install -e .
+
+# Install with dev dependencies
+pip install -e ".[dev]"
 ```
 
 ## CLI Usage
@@ -46,11 +58,20 @@ jobscout http users "https://api.example.com/users" --retries 5 --rate-limit 1.0
 # Collect from RSS feed
 jobscout rss news "https://news.ycombinator.com/rss"
 
+# Collect from WebSocket
+jobscout ws prices "wss://echo.websocket.org" --max-messages 50
+
 # Collect from file
 jobscout file data ./data.json --format json
 
 # Run from config file
 jobscout run sources.json
+
+# Run with caching (skip re-fetching within 10 minutes)
+jobscout --cache-ttl 600 run sources.json
+
+# Run on schedule (every 300 seconds)
+jobscout --schedule 300 run sources.json
 ```
 
 ## Config File Format
@@ -78,6 +99,13 @@ jobscout run sources.json
       "type": "file",
       "path": "./data.csv",
       "format": "csv"
+    },
+    {
+      "name": "prices",
+      "type": "ws",
+      "url": "wss://echo.websocket.org",
+      "max_messages": 100,
+      "message_field": "price"
     }
   ]
 }
@@ -87,10 +115,10 @@ jobscout run sources.json
 
 ```python
 import asyncio
-from jobscout.collector import Collector, HTTPSource, FileSource
+from jobscout.collector import Collector, HTTPSource, FileSource, WebSocketSource
 
 async def main():
-    collector = Collector()
+    collector = Collector(cache_ttl=600)  # Cache for 10 minutes
     
     # Add HTTP source with retry and rate limiting
     collector.add_source(HTTPSource(
@@ -105,11 +133,15 @@ async def main():
     # Add file source
     collector.add_source(FileSource("local", "./data.json"))
     
+    # Add WebSocket source
+    collector.add_source(WebSocketSource("prices", "wss://echo.websocket.org"))
+    
     # Collect concurrently (max 5 at a time)
     results = await collector.collect_concurrent(max_concurrent=5)
     
-    # Deduplicate
+    # Deduplicate (exact or fuzzy)
     collector.deduplicate()
+    collector.deduplicate_fuzzy(threshold=0.85)
     
     # Filter
     filtered = collector.filter_items(type="user")
@@ -133,11 +165,15 @@ JobScout/
 ├── jobscout/
 │   ├── __init__.py      # Package metadata
 │   ├── models.py        # CollectedItem data model
-│   ├── collector.py     # Sources and collector with retry/dedup
+│   ├── collector.py     # Sources and collector with retry/dedup/cache/scheduler
 │   └── cli.py           # CLI interface
 ├── tests/
-│   └── test_all.py      # 12 unit tests
-├── setup.py             # Package configuration
+│   └── test_all.py      # 15 unit tests
+├── .github/
+│   └── workflows/
+│       └── ci.yml       # GitHub Actions CI
+├── pyproject.toml       # Modern Python packaging
+├── setup.py             # Legacy package configuration
 └── README.md
 ```
 
