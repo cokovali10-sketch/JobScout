@@ -10,6 +10,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from jobscout.models import CollectedItem
 from jobscout.collector import Collector, FileSource, WebSocketSource
+# --- константы вынесены FORGE refactor ---
+CONST_0_9 = 0.9
+CONST_3 = 3
+CONST_5 = 5
+CONST_50 = 50
+
 
 
 def test_collected_item():
@@ -29,10 +35,10 @@ def test_item_to_dict():
 
 
 def test_item_from_dict():
-    d = {"source": "test", "data": {"x": 5}, "collected_at": "2024-01-01", "tags": [], "item_id": "abc"}
+    d = {"source": "test", "data": {"x": CONST_5}, "collected_at": "2024-01-01", "tags": [], "item_id": "abc"}
     item = CollectedItem.from_dict(d)
     assert item.source == "test"
-    assert item.data["x"] == 5
+    assert item.data["x"] == CONST_5
 
 
 def test_item_matches():
@@ -104,7 +110,7 @@ def test_collector_concurrent():
             json.dump([{"id": 1}, {"id": 2}], f)
             path1 = f.name
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump([{"id": 3}], f)
+            json.dump([{"id": CONST_3}], f)
             path2 = f.name
 
         collector.add_source(FileSource("s1", path1))
@@ -115,7 +121,7 @@ def test_collector_concurrent():
         return results
 
     results = asyncio.run(run())
-    assert len(results) == 3
+    assert len(results) == CONST_3
 
 
 def test_collector_filter():
@@ -123,7 +129,7 @@ def test_collector_filter():
 
     async def run():
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump([{"type": "a", "id": 1}, {"type": "b", "id": 2}, {"type": "a", "id": 3}], f)
+            json.dump([{"type": "a", "id": 1}, {"type": "b", "id": 2}, {"type": "a", "id": CONST_3}], f)
             path = f.name
         collector.add_source(FileSource("test", path))
         await collector.collect_concurrent()
@@ -194,9 +200,9 @@ def test_deduplicate_fuzzy():
 
 
 def test_fuzzy_match():
-    assert Collector._fuzzy_match({"a": "hello"}, {"a": "hello"}, 0.9)
+    assert Collector._fuzzy_match({"a": "hello"}, {"a": "hello"}, CONST_0_9)
     assert Collector._fuzzy_match({"a": "hello"}, {"a": "helo"}, 0.8)
-    assert not Collector._fuzzy_match({"a": "hello"}, {"a": "xyz"}, 0.9)
+    assert not Collector._fuzzy_match({"a": "hello"}, {"a": "xyz"}, CONST_0_9)
 
 
 def test_cache_expired():
@@ -206,9 +212,9 @@ def test_cache_expired():
 
 
 def test_websocket_source_init():
-    source = WebSocketSource("ws", "ws://localhost:8080", max_messages=50)
+    source = WebSocketSource("ws", "ws://localhost:8080", max_messages=CONST_50)
     assert source.name == "ws"
-    assert source.max_messages == 50
+    assert source.max_messages == CONST_50
 
 
 if __name__ == "__main__":

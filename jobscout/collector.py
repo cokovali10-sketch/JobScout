@@ -6,13 +6,18 @@ import asyncio
 import hashlib
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Set
 
 import aiohttp
 
 from .models import CollectedItem
+# --- константы вынесены FORGE refactor ---
+CONST_3 = 3
+CONST_30 = 30
+CONST_200 = 200
+
 
 
 class DataSource(ABC):
@@ -31,7 +36,7 @@ class DataSource(ABC):
 class HTTPSource(DataSource):
     def __init__(self, name: str, url: str, headers: Optional[Dict] = None,
                  parser: str = "json", item_path: str = "",
-                 retries: int = 3, retry_delay: float = 1.0,
+                 retries: int = CONST_3, retry_delay: float = 1.0,
                  rate_limit: float = 0, **kwargs):
         super().__init__(name, kwargs)
         self.url = url
@@ -57,12 +62,12 @@ class HTTPSource(DataSource):
             try:
                 await self._rate_wait()
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(self.url, headers=self.headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    async with session.get(self.url, headers=self.headers, timeout=aiohttp.ClientTimeout(total=CONST_30)) as resp:
                         if resp.status == 429:
                             retry_after = float(resp.headers.get("Retry-After", self.retry_delay * (attempt + 1)))
                             await asyncio.sleep(retry_after)
                             continue
-                        if resp.status != 200:
+                        if resp.status != CONST_200:
                             raise RuntimeError(f"HTTP {resp.status} from {self.url}")
 
                         if self.parser == "json":
@@ -148,7 +153,7 @@ class FileSource(DataSource):
 
 
 class RSSSource(DataSource):
-    def __init__(self, name: str, url: str, retries: int = 3,
+    def __init__(self, name: str, url: str, retries: int = CONST_3,
                  retry_delay: float = 1.0, **kwargs):
         super().__init__(name, kwargs)
         self.url = url
@@ -161,8 +166,8 @@ class RSSSource(DataSource):
         for attempt in range(self.retries):
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(self.url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                        if resp.status != 200:
+                    async with session.get(self.url, timeout=aiohttp.ClientTimeout(total=CONST_30)) as resp:
+                        if resp.status != CONST_200:
                             raise RuntimeError(f"HTTP {resp.status} from {self.url}")
                         text = await resp.text()
                         item_blocks = re.findall(r"<item>(.*?)</item>", text, re.DOTALL)
@@ -185,7 +190,7 @@ class RSSSource(DataSource):
 class WebSocketSource(DataSource):
     def __init__(self, name: str, url: str, max_messages: int = 100,
                  message_field: str = "", parse_json: bool = True,
-                 retries: int = 3, retry_delay: float = 1.0, **kwargs):
+                 retries: int = CONST_3, retry_delay: float = 1.0, **kwargs):
         super().__init__(name, kwargs)
         self.url = url
         self.max_messages = max_messages

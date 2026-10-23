@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import json
 
 
